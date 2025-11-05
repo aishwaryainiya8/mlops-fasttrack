@@ -1,0 +1,103 @@
+name: MLOps Cloud Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mlops:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: mlops-fasttrack
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Pull DVC data
+        run: dvc pull
+
+      - name: Lint code
+        run: flake8 src/ app/
+
+      - name: Train model
+        run: python src/train.py
+
+      - name: Build Docker image
+        run: docker build -t $PROJECT_NAME:latest .
+
+      # -----------------------------
+      # AWS ECS Deployment
+      # -----------------------------
+      - name: Configure AWS credentials
+        if: env.CLOUD_PROVIDER == 'AWS'
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        if: env.CLOUD_PROVIDER == 'AWS'
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          docker tag $PROJECT_NAME:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$PROJECT_NAME:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$PROJECT_NAME:latest
+
+      - name: Update ECS service
+        if: env.CLOUD_PROVIDER == 'AWS'
+        run: |
+          aws ecs update-service --cluster ${{ secrets.AWS_ECS_CLUSTER }} --service ${{ secrets.AWS_ECS_SERVICE }} --force-new-deployment
+
+      # -----------------------------
+      # GCP Cloud Run Deployment
+      # -----------------------------
+      - name: Authenticate GCP
+        if: env.CLOUD_PROVIDER == 'GCP'
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Build and deploy to Cloud Run
+        if: env.CLOUD_PROVIDER == 'GCP'
+        run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/$PROJECT_NAME:latest
+          gcloud run deploy $PROJECT_NAME \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/$PROJECT_NAME:latest \
+            --platform managed --region ${{ secrets.GCP_REGION }} \
+            --allow-unauthenticated
+
+      # -----------------------------
+      # Azure App Service Deployment
+      # -----------------------------
+      - name: Login to Azure
+        if: env.CLOUD_PROVIDER == 'AZURE'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push Docker image to Azure Container Registry
+        if: env.CLOUD_PROVIDER == 'AZURE'
+        run: |
+          az acr login --name ${{ secrets.AZURE_ACR_NAME }}
+          docker tag $PROJECT_NAME:latest ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/$PROJECT_NAME:latest
+          docker push ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/$PROJECT_NAME:latest
+
+      - name: Deploy to Azure App Service
+        if: env.CLOUD_PROVIDER == 'AZURE'
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          images: ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/$PROJECT_NAME:latest
+

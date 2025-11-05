@@ -1,0 +1,73 @@
+name: Full MLOps CI/CD
+
+on:
+  push:
+    branches: [main, feature]
+  pull_request:
+    branches: [main]
+
+jobs:
+  mlops_pipeline:
+    runs-on: ubuntu-latest
+    env:
+      MLFLOW_TRACKING_URI: ./mlruns
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # 2️⃣ Setup Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mlflow dvc[all] uvicorn scikit-learn pandas docker
+
+      # 4️⃣ Pull DVC data
+      - name: Pull data from DVC
+        run: dvc pull
+
+      # 5️⃣ Lint code
+      - name: Lint code
+        run: flake8 src/ app/
+
+      # 6️⃣ Train model
+      - name: Train model
+        run: python src/train.py
+
+      # 7️⃣ Build Docker image
+      - name: Build Docker image
+        run: docker build -t mlops-fasttrack:latest .
+
+      # 8️⃣ Login to GitHub Container Registry (optional)
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 9️⃣ Push Docker image to registry (optional)
+      - name: Push Docker image
+        run: |
+          docker tag mlops-fasttrack:latest ghcr.io/${{ github.repository_owner }}/mlops-fasttrack:latest
+          docker push ghcr.io/${{ github.repository_owner }}/mlops-fasttrack:latest
+
+      # 🔟 Deploy to AWS ECS
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service --cluster mlops-cluster --service mlops-service --force-new-deployment
+
