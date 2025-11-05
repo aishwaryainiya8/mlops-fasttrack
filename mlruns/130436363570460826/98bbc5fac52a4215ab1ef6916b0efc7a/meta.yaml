@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/sureshkumar/Mlops/mlops-fasttrack/mlruns/130436363570460826/98bbc5fac52a4215ab1ef6916b0efc7a/artifacts
+end_time: 1762323219346
+entry_point_name: ''
+experiment_id: '130436363570460826'
+lifecycle_stage: active
+run_id: 98bbc5fac52a4215ab1ef6916b0efc7a
+run_name: mysterious-ox-521
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762323216067
+status: 3
+tags: []
+user_id: sureshkumar

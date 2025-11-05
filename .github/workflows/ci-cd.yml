@@ -1,0 +1,32 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r src/requirements.txt || true
+
+      - name: Run training script
+        run: python src/train.py
+
+      - name: Build Docker image
+        run: docker build -t $GH_USER/$REPO_NAME:latest ./app
+
+      - name: Push Docker image
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u $GH_USER --password-stdin
+          docker push $GH_USER/$REPO_NAME:latest

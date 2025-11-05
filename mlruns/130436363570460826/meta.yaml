@@ -1,0 +1,6 @@
+artifact_location: file:///Users/sureshkumar/Mlops/mlops-fasttrack/mlruns/130436363570460826
+creation_time: 1762323215922
+experiment_id: '130436363570460826'
+last_update_time: 1762323215922
+lifecycle_stage: active
+name: Iris-Classification
