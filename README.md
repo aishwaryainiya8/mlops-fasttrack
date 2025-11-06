@@ -1,6 +1,4 @@
 
-mlops-fasttrack
-=======
 # mlops-fasttrack 🚀
 End-to-end MLOps Project using:
 - DVC for data versioning  
